@@ -3283,47 +3283,67 @@ static void FillOutBufferDescCommon(DescType *desc, UINT stride,
 	// here (and the below should work), but we would need to
 	// create a new view every time the offset changes.
 	if (stride) {
-		desc->Buffer.FirstElement = offset / stride;
-		desc->Buffer.NumElements = (buf_src_size - offset) / stride;
+		desc->FirstElement = offset / stride;
+		desc->NumElements = (buf_src_size - offset) / stride;
 	} else {
-		desc->Buffer.FirstElement = 0;
-		desc->Buffer.NumElements = 1;
+		desc->FirstElement = 0;
+		desc->NumElements = 1;
 	}
 }
 
 static D3D11_SHADER_RESOURCE_VIEW_DESC* FillOutBufferDesc(
 		D3D11_SHADER_RESOURCE_VIEW_DESC *desc, UINT stride,
-		UINT offset, UINT buf_src_size)
+		UINT offset, UINT buf_src_size, ResourceCopyOptions options)
 {
-	// TODO: Also handle BUFFEREX for raw buffers
-	desc->ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-
-	FillOutBufferDescCommon<D3D11_SHADER_RESOURCE_VIEW_DESC>(desc, stride, offset, buf_src_size);
+	if (options & ResourceCopyOptions::RAW_VIEW) {
+		// FIXME: Do we need to override stride to 4?
+		// FIXME: Do we need to force desc->Format =
+		// DXGI_FORMAT_R32_TYPELESS like UAVs?
+		desc->ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
+		desc->BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
+		FillOutBufferDescCommon<D3D11_BUFFEREX_SRV>(&desc->BufferEx, stride, offset, buf_src_size);
+	} else {
+		desc->ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		FillOutBufferDescCommon<D3D11_BUFFER_SRV>(&desc->Buffer, stride, offset, buf_src_size);
+	}
 	return desc;
 }
 static D3D11_RENDER_TARGET_VIEW_DESC* FillOutBufferDesc(
 		D3D11_RENDER_TARGET_VIEW_DESC *desc, UINT stride,
-		UINT offset, UINT buf_src_size)
+		UINT offset, UINT buf_src_size, ResourceCopyOptions options)
 {
 	desc->ViewDimension = D3D11_RTV_DIMENSION_BUFFER;
 
-	FillOutBufferDescCommon<D3D11_RENDER_TARGET_VIEW_DESC>(desc, stride, offset, buf_src_size);
+	FillOutBufferDescCommon<D3D11_BUFFER_RTV>(&desc->Buffer, stride, offset, buf_src_size);
 	return desc;
 }
 static D3D11_UNORDERED_ACCESS_VIEW_DESC* FillOutBufferDesc(
 		D3D11_UNORDERED_ACCESS_VIEW_DESC *desc, UINT stride,
-		UINT offset, UINT buf_src_size)
+		UINT offset, UINT buf_src_size, ResourceCopyOptions options)
 {
 	desc->ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-	// TODO Support buffer UAV flags for append, counter and raw buffers.
 	desc->Buffer.Flags = 0;
 
-	FillOutBufferDescCommon<D3D11_UNORDERED_ACCESS_VIEW_DESC>(desc, stride, offset, buf_src_size);
+	if (options & ResourceCopyOptions::RAW_VIEW) {
+		// FIXME: Do we need to override stride to 4?
+		desc->Buffer.Flags |= D3D11_BUFFER_UAV_FLAG_RAW;
+		desc->Format = DXGI_FORMAT_R32_TYPELESS;
+	}
+	if (options & ResourceCopyOptions::UAV_APPEND) {
+		desc->Buffer.Flags |= D3D11_BUFFER_UAV_FLAG_APPEND;
+		desc->Format = DXGI_FORMAT_UNKNOWN;
+	}
+	if (options & ResourceCopyOptions::UAV_COUNTER) {
+		desc->Buffer.Flags |= D3D11_BUFFER_UAV_FLAG_COUNTER;
+		desc->Format = DXGI_FORMAT_UNKNOWN;
+	}
+
+	FillOutBufferDescCommon<D3D11_BUFFER_UAV>(&desc->Buffer, stride, offset, buf_src_size);
 	return desc;
 }
 static D3D11_DEPTH_STENCIL_VIEW_DESC* FillOutBufferDesc(
 		D3D11_DEPTH_STENCIL_VIEW_DESC *desc, UINT stride,
-		UINT offset, UINT buf_src_size)
+		UINT offset, UINT buf_src_size, ResourceCopyOptions options)
 {
 	// Depth views don't support buffers:
 	return NULL;
@@ -3588,7 +3608,8 @@ static ID3D11View* _CreateCompatibleView(
 		UINT stride,
 		UINT offset,
 		DXGI_FORMAT format,
-		UINT buf_src_size)
+		UINT buf_src_size,
+		ResourceCopyOptions options)
 {
 	D3D11_RESOURCE_DIMENSION dimension;
 	ID3D11Texture1D *tex1d;
@@ -3610,7 +3631,7 @@ static ID3D11View* _CreateCompatibleView(
 
 			view_desc.Format = format;
 
-			pDesc = FillOutBufferDesc(&view_desc, stride, offset, buf_src_size);
+			pDesc = FillOutBufferDesc(&view_desc, stride, offset, buf_src_size, options);
 
 			// This should already handle things like:
 			// - Copying a vertex buffer to a SRV or constant buffer
@@ -3672,29 +3693,30 @@ static ID3D11View* CreateCompatibleView(
 		UINT stride,
 		UINT offset,
 		DXGI_FORMAT format,
-		UINT buf_src_size)
+		UINT buf_src_size,
+		ResourceCopyOptions options)
 {
 	switch (dst->type) {
 		case ResourceCopyTargetType::SHADER_RESOURCE:
 			return _CreateCompatibleView<ID3D11ShaderResourceView,
 			       D3D11_SHADER_RESOURCE_VIEW_DESC,
 			       &ID3D11Device::CreateShaderResourceView>
-				       (resource, device, stride, offset, format, buf_src_size);
+				       (resource, device, stride, offset, format, buf_src_size, options);
 		case ResourceCopyTargetType::RENDER_TARGET:
 			return _CreateCompatibleView<ID3D11RenderTargetView,
 			       D3D11_RENDER_TARGET_VIEW_DESC,
 			       &ID3D11Device::CreateRenderTargetView>
-				       (resource, device, stride, offset, format, buf_src_size);
+				       (resource, device, stride, offset, format, buf_src_size, options);
 		case ResourceCopyTargetType::DEPTH_STENCIL_TARGET:
 			return _CreateCompatibleView<ID3D11DepthStencilView,
 			       D3D11_DEPTH_STENCIL_VIEW_DESC,
 			       &ID3D11Device::CreateDepthStencilView>
-				       (resource, device, stride, offset, format, buf_src_size);
+				       (resource, device, stride, offset, format, buf_src_size, options);
 		case ResourceCopyTargetType::UNORDERED_ACCESS_VIEW:
 			return _CreateCompatibleView<ID3D11UnorderedAccessView,
 			       D3D11_UNORDERED_ACCESS_VIEW_DESC,
 			       &ID3D11Device::CreateUnorderedAccessView>
-				       (resource, device, stride, offset, format, buf_src_size);
+				       (resource, device, stride, offset, format, buf_src_size, options);
 	}
 	return NULL;
 }
@@ -4188,7 +4210,7 @@ void ResourceCopyOperation::run(HackerDevice *mHackerDevice, HackerContext *mHac
 
 	if (!dst_view) {
 		dst_view = CreateCompatibleView(&dst, dst_resource, mOrigDevice,
-				stride, offset, format, buf_src_size);
+				stride, offset, format, buf_src_size, options);
 		// Not checking for NULL return as view's are not applicable to
 		// all types. Legitimate failures are logged.
 		*pp_cached_view = dst_view;

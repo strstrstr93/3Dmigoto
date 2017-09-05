@@ -548,6 +548,9 @@ enum class ResourceCopyOptions {
 	COPY_DESC       = 0x00000080,
 	SET_VIEWPORT    = 0x00000100,
 	NO_VIEW_CACHE   = 0x00000200,
+	UAV_APPEND      = 0x00000400,
+	UAV_COUNTER     = 0x00000800,
+	RAW_VIEW        = 0x00001000,
 
 	COPY_MASK       = 0x000000c9, // Anything that implies a copy
 	COPY_TYPE_MASK  = 0x000000cb, // Anything that implies a copy or a reference
@@ -566,6 +569,10 @@ static EnumName_t<wchar_t *, ResourceCopyOptions> ResourceCopyOptionNames[] = {
 	{L"stereo2mono", ResourceCopyOptions::STEREO2MONO},
 	{L"set_viewport", ResourceCopyOptions::SET_VIEWPORT},
 	{L"no_view_cache", ResourceCopyOptions::NO_VIEW_CACHE},
+	{L"append", ResourceCopyOptions::UAV_APPEND},
+	{L"consume", ResourceCopyOptions::UAV_APPEND},
+	{L"counter", ResourceCopyOptions::UAV_COUNTER},
+	{L"raw", ResourceCopyOptions::RAW_VIEW},
 
 	// This one currently depends on device support for resolving the
 	// given texture format (D3D11_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE), and
@@ -582,7 +589,6 @@ static EnumName_t<wchar_t *, ResourceCopyOptions> ResourceCopyOptionNames[] = {
 // and have real potential to be useful later. For now they are just
 // food for thought:
 //
-// res_format= - override DXGI Format when creating a resource
 // view_format= - override DXGI Format when creating a view
 // if_dest_is_null - only perform the operation if the destination is not currently assigned
 // if_dest_is_compatible - only perform the operation if the destination exists, and is compatible with the source
