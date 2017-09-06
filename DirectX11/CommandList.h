@@ -532,7 +532,8 @@ public:
 			UINT stride,
 			UINT offset,
 			DXGI_FORMAT format,
-			UINT buf_size);
+			UINT buf_size,
+			bool reset_uav_counter);
 	D3D11_BIND_FLAG BindFlags();
 };
 
@@ -550,10 +551,12 @@ enum class ResourceCopyOptions {
 	NO_VIEW_CACHE   = 0x00000200,
 	UAV_APPEND      = 0x00000400,
 	UAV_COUNTER     = 0x00000800,
-	RAW_VIEW        = 0x00001000,
+	RESET_COUNTER   = 0x00001000,
+	COPY_COUNTER    = 0x00002000,
+	RAW_VIEW        = 0x00004000,
 
-	COPY_MASK       = 0x000000c9, // Anything that implies a copy
-	COPY_TYPE_MASK  = 0x000000cb, // Anything that implies a copy or a reference
+	COPY_MASK       = 0x000020c9, // Anything that implies a copy
+	COPY_TYPE_MASK  = 0x000020cb, // Anything that implies a copy or a reference
 	CREATEMODE_MASK = 0x00000070,
 };
 SENSIBLE_ENUM(ResourceCopyOptions);
@@ -571,7 +574,9 @@ static EnumName_t<wchar_t *, ResourceCopyOptions> ResourceCopyOptionNames[] = {
 	{L"no_view_cache", ResourceCopyOptions::NO_VIEW_CACHE},
 	{L"append", ResourceCopyOptions::UAV_APPEND},
 	{L"consume", ResourceCopyOptions::UAV_APPEND},
-	{L"counter", ResourceCopyOptions::UAV_COUNTER},
+	{L"enable_counter", ResourceCopyOptions::UAV_COUNTER},
+	{L"reset_counter", ResourceCopyOptions::RESET_COUNTER},
+	{L"copy_counter", ResourceCopyOptions::COPY_COUNTER},
 	{L"raw", ResourceCopyOptions::RAW_VIEW},
 
 	// This one currently depends on device support for resolving the
